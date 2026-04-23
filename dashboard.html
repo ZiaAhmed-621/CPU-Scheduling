@@ -1,0 +1,1301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Energy-Aware CPU Scheduler — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #060a10;
+    --surface: #0d1421;
+    --surface2: #121c2e;
+    --border: #1e2d45;
+    --accent: #00e5ff;
+    --accent2: #ff6b35;
+    --accent3: #39ff14;
+    --accent4: #ff2d78;
+    --text: #c8daf0;
+    --muted: #4a6380;
+    --warm: #ffb547;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Grid background ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Header ── */
+  header {
+    position: relative;
+    z-index: 10;
+    padding: 32px 48px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .logo-block h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.5px;
+  }
+
+  .logo-block h1 span { color: var(--accent); }
+
+  .logo-block p {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .header-badge {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .badge {
+    font-size: 10px;
+    padding: 4px 10px;
+    border-radius: 2px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .badge-algo { background: rgba(0,229,255,0.15); color: var(--accent); border: 1px solid rgba(0,229,255,0.3); }
+  .badge-live { background: rgba(57,255,20,0.12); color: var(--accent3); border: 1px solid rgba(57,255,20,0.3); }
+
+  /* ── Scenario controls ── */
+  .controls {
+    position: relative;
+    z-index: 10;
+    padding: 20px 48px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .controls label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+
+  .scenario-btns { display: flex; gap: 8px; }
+
+  .scenario-btn {
+    padding: 8px 18px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .scenario-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .scenario-btn.active { border-color: var(--accent); background: rgba(0,229,255,0.1); color: var(--accent); }
+
+  .run-btn {
+    margin-left: auto;
+    padding: 10px 28px;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+    text-transform: uppercase;
+  }
+
+  .run-btn:hover { background: #fff; transform: translateY(-1px); }
+  .run-btn:active { transform: translateY(0); }
+
+  /* Speed slider */
+  .speed-control { display: flex; align-items: center; gap: 10px; }
+  input[type=range] { accent-color: var(--accent); width: 100px; }
+
+  /* ── Main layout ── */
+  .main {
+    position: relative;
+    z-index: 5;
+    padding: 32px 48px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 20px;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    animation: fadeIn 0.5s ease forwards;
+    opacity: 0;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .card:nth-child(1) { animation-delay: 0.05s; }
+  .card:nth-child(2) { animation-delay: 0.10s; }
+  .card:nth-child(3) { animation-delay: 0.15s; }
+  .card:nth-child(4) { animation-delay: 0.20s; }
+  .card:nth-child(5) { animation-delay: 0.25s; }
+  .card:nth-child(6) { animation-delay: 0.30s; }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px;
+    height: 100%;
+    background: var(--accent);
+  }
+
+  .card.orange::before { background: var(--accent2); }
+  .card.green::before  { background: var(--accent3); }
+  .card.pink::before   { background: var(--accent4); }
+  .card.warm::before   { background: var(--warm); }
+
+  .card-title {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  .card-big {
+    grid-column: span 2;
+  }
+
+  .card-full {
+    grid-column: 1 / -1;
+  }
+
+  /* ── KPI row ── */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    grid-column: 1/-1;
+  }
+
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    animation: fadeIn 0.4s ease forwards;
+    opacity: 0;
+  }
+
+  .kpi::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 1px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.6s ease;
+  }
+
+  .kpi.loaded::after { transform: scaleX(1); }
+
+  .kpi-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+
+  .kpi-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 36px;
+    font-weight: 800;
+    color: #fff;
+    margin: 6px 0 2px;
+    line-height: 1;
+  }
+
+  .kpi-value .unit {
+    font-size: 14px;
+    color: var(--muted);
+    font-weight: 400;
+  }
+
+  .kpi-delta {
+    font-size: 11px;
+  }
+
+  .kpi-delta.good { color: var(--accent3); }
+  .kpi-delta.bad  { color: var(--accent4); }
+  .kpi-delta.neutral { color: var(--warm); }
+
+  /* ── Canvas charts ── */
+  canvas {
+    display: block;
+    width: 100%;
+  }
+
+  /* ── Gantt chart ── */
+  .gantt-wrap {
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+
+  #ganttCanvas {
+    height: 200px;
+  }
+
+  /* ── Log table ── */
+  .log-wrap {
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+
+  th {
+    text-align: left;
+    padding: 8px 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 400;
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+  }
+
+  td {
+    padding: 7px 12px;
+    border-bottom: 1px solid rgba(30,45,69,0.5);
+    color: var(--text);
+  }
+
+  tr:hover td { background: rgba(0,229,255,0.04); }
+
+  .tag {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-radius: 2px;
+  }
+
+  .tag-ui     { background: rgba(0,229,255,0.15); color: var(--accent); }
+  .tag-media  { background: rgba(255,107,53,0.15); color: var(--accent2); }
+  .tag-sensor { background: rgba(57,255,20,0.15); color: var(--accent3); }
+  .tag-bg     { background: rgba(74,99,128,0.3); color: var(--muted); }
+  .tag-net    { background: rgba(255,181,71,0.15); color: var(--warm); }
+
+  /* ── Comparison bars ── */
+  .compare-row {
+    margin-bottom: 14px;
+  }
+
+  .compare-row-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+
+  .bar-wrap {
+    height: 8px;
+    background: var(--border);
+    position: relative;
+    overflow: visible;
+  }
+
+  .bar {
+    height: 100%;
+    transition: width 1s cubic-bezier(0.16,1,0.3,1);
+  }
+
+  .bar-ea  { background: var(--accent); }
+  .bar-rr  { background: var(--accent4); }
+
+  /* ── Frequency heatmap ── */
+  .freq-grid {
+    display: flex;
+    gap: 3px;
+    flex-wrap: wrap;
+  }
+
+  .freq-cell {
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    transition: background 0.2s;
+  }
+
+  /* ── Governor comparison ── */
+  .gov-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 12px;
+  }
+
+  .gov-name {
+    width: 110px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .gov-bar-wrap {
+    flex: 1;
+    height: 6px;
+    background: var(--border);
+  }
+
+  .gov-bar { height: 100%; transition: width 1s ease; }
+
+  .gov-val { font-size: 11px; color: var(--text); width: 70px; text-align: right; }
+
+  /* ── Thermal zones ── */
+  .thermal-zones {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 4px;
+  }
+
+  .tz {
+    border: 1px solid var(--border);
+    padding: 12px;
+    text-align: center;
+  }
+
+  .tz-name { font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); }
+  .tz-temp { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; margin: 6px 0 2px; }
+  .tz-bar-wrap { height: 4px; background: var(--border); margin-top: 8px; }
+  .tz-bar { height: 100%; transition: width 0.8s ease, background 0.5s; }
+  .tz-status { font-size: 10px; margin-top: 6px; letter-spacing: 1px; }
+
+  /* ── Sim progress ── */
+  .progress-wrap {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 48px;
+    background: rgba(0,229,255,0.05);
+    border-bottom: 1px solid rgba(0,229,255,0.2);
+  }
+
+  .progress-wrap.visible { display: flex; }
+
+  .progress-bar-outer {
+    flex: 1;
+    height: 3px;
+    background: var(--border);
+  }
+
+  .progress-bar-inner {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.1s linear;
+  }
+
+  .progress-label { font-size: 11px; color: var(--accent); }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); }
+
+  /* ── Pulse dot ── */
+  .pulse {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent3);
+    margin-right: 6px;
+    animation: pulse 1.5s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.7); }
+  }
+
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo-block">
+    <h1>Energy-Aware <span>CPU Scheduler</span></h1>
+    <p>DVFS · Thermal-Aware · EDF + Priority · Mobile &amp; Embedded</p>
+  </div>
+  <div class="header-badge">
+    <span class="badge badge-algo">EDF + DVFS</span>
+    <span class="badge badge-live"><span class="pulse"></span>Simulation</span>
+  </div>
+</header>
+
+<!-- CONTROLS -->
+<div class="controls">
+  <label>Scenario</label>
+  <div class="scenario-btns">
+    <button class="scenario-btn active" data-scenario="mixed">Mixed</button>
+    <button class="scenario-btn" data-scenario="stress">Stress</button>
+    <button class="scenario-btn" data-scenario="idle">Idle</button>
+  </div>
+  <div class="speed-control">
+    <label>Speed</label>
+    <input type="range" id="speedSlider" min="1" max="10" value="5">
+    <span id="speedVal" style="font-size:11px;color:var(--accent)">5×</span>
+  </div>
+  <label style="margin-left:16px">Tasks</label>
+  <input type="range" id="taskSlider" min="10" max="80" value="35"
+         style="accent-color:var(--accent2);width:90px">
+  <span id="taskVal" style="font-size:11px;color:var(--accent2)">35</span>
+
+  <button class="run-btn" id="runBtn">▶ Run Simulation</button>
+</div>
+
+<!-- PROGRESS -->
+<div class="progress-wrap" id="progressWrap">
+  <span class="progress-label" id="progressLabel">Initialising…</span>
+  <div class="progress-bar-outer">
+    <div class="progress-bar-inner" id="progressBar"></div>
+  </div>
+</div>
+
+<!-- MAIN DASHBOARD -->
+<div class="main" id="dashboard">
+
+  <!-- KPI ROW -->
+  <div class="kpi-grid">
+    <div class="kpi" id="kpi-energy">
+      <div class="kpi-label">Energy Saved</div>
+      <div class="kpi-value" id="val-saving">—<span class="unit"> %</span></div>
+      <div class="kpi-delta good" id="val-saving-sub">vs Round-Robin baseline</div>
+    </div>
+    <div class="kpi" id="kpi-tasks">
+      <div class="kpi-label">Tasks Completed</div>
+      <div class="kpi-value" id="val-tasks">—</div>
+      <div class="kpi-delta neutral" id="val-tasks-sub">tasks processed</div>
+    </div>
+    <div class="kpi" id="kpi-turn">
+      <div class="kpi-label">Avg Turnaround</div>
+      <div class="kpi-value" id="val-turn">—<span class="unit"> ms</span></div>
+      <div class="kpi-delta" id="val-turn-sub">—</div>
+    </div>
+    <div class="kpi" id="kpi-temp">
+      <div class="kpi-label">Peak Temperature</div>
+      <div class="kpi-value" id="val-temp">—<span class="unit"> °C</span></div>
+      <div class="kpi-delta" id="val-temp-sub">CPU_BIG zone</div>
+    </div>
+  </div>
+
+  <!-- FREQUENCY / ENERGY TIMELINE -->
+  <div class="card card-big">
+    <div class="card-title">CPU Frequency &amp; Energy / Tick</div>
+    <canvas id="freqChart" height="160"></canvas>
+  </div>
+
+  <!-- THERMAL ZONES -->
+  <div class="card green">
+    <div class="card-title">Thermal Zones</div>
+    <div class="thermal-zones" id="thermalZones">
+      <div class="tz">
+        <div class="tz-name">CPU BIG</div>
+        <div class="tz-temp" id="tz-big" style="color:var(--accent3)">—°</div>
+        <div class="tz-bar-wrap"><div class="tz-bar" id="tzbar-big" style="width:0%;background:var(--accent3)"></div></div>
+        <div class="tz-status" id="tzs-big" style="color:var(--muted)">COOL</div>
+      </div>
+      <div class="tz">
+        <div class="tz-name">CPU LITTLE</div>
+        <div class="tz-temp" id="tz-little" style="color:var(--accent)">—°</div>
+        <div class="tz-bar-wrap"><div class="tz-bar" id="tzbar-little" style="width:0%;background:var(--accent)"></div></div>
+        <div class="tz-status" id="tzs-little" style="color:var(--muted)">COOL</div>
+      </div>
+      <div class="tz">
+        <div class="tz-name">SOC PKG</div>
+        <div class="tz-temp" id="tz-soc" style="color:var(--warm)">—°</div>
+        <div class="tz-bar-wrap"><div class="tz-bar" id="tzbar-soc" style="width:0%;background:var(--warm)"></div></div>
+        <div class="tz-status" id="tzs-soc" style="color:var(--muted)">COOL</div>
+      </div>
+    </div>
+    <!-- Thermal timeline -->
+    <div style="margin-top:16px">
+      <div class="card-title" style="margin-bottom:8px">Temperature History (BIG)</div>
+      <canvas id="thermalChart" height="90"></canvas>
+    </div>
+  </div>
+
+  <!-- GANTT CHART -->
+  <div class="card card-full orange">
+    <div class="card-title">Task Gantt Chart — Scheduling Timeline</div>
+    <div class="gantt-wrap">
+      <canvas id="ganttCanvas"></canvas>
+    </div>
+  </div>
+
+  <!-- GOVERNOR COMPARISON -->
+  <div class="card warm">
+    <div class="card-title">Governor Energy Comparison</div>
+    <div id="govCompare">
+      <div class="gov-row">
+        <div class="gov-name">schedutil</div>
+        <div class="gov-bar-wrap"><div class="gov-bar" id="gov-schedutil" style="width:0%;background:var(--accent)"></div></div>
+        <div class="gov-val" id="govv-schedutil">—</div>
+      </div>
+      <div class="gov-row">
+        <div class="gov-name">ondemand</div>
+        <div class="gov-bar-wrap"><div class="gov-bar" id="gov-ondemand" style="width:0%;background:var(--warm)"></div></div>
+        <div class="gov-val" id="govv-ondemand">—</div>
+      </div>
+      <div class="gov-row">
+        <div class="gov-name">performance</div>
+        <div class="gov-bar-wrap"><div class="gov-bar" id="gov-performance" style="width:0%;background:var(--accent4)"></div></div>
+        <div class="gov-val" id="govv-performance">—</div>
+      </div>
+      <div class="gov-row">
+        <div class="gov-name">powersave</div>
+        <div class="gov-bar-wrap"><div class="gov-bar" id="gov-powersave" style="width:0%;background:var(--muted)"></div></div>
+        <div class="gov-val" id="govv-powersave">—</div>
+      </div>
+    </div>
+    <div style="margin-top:16px">
+      <!-- DVFS OPP freq heatmap -->
+      <div class="card-title" style="margin-bottom:8px">DVFS Frequency Heatmap</div>
+      <div class="freq-grid" id="freqHeatmap"></div>
+      <div style="display:flex;gap:8px;margin-top:8px;font-size:9px;color:var(--muted)">
+        <span>■ <span style="color:var(--muted)">300MHz</span></span>
+        <span>■ <span style="color:#2a7d8c">600</span></span>
+        <span>■ <span style="color:#1a9e9e">900</span></span>
+        <span>■ <span style="color:#0cbfa8">1200</span></span>
+        <span>■ <span style="color:#00d4b5">1500</span></span>
+        <span>■ <span style="color:var(--accent)">1800MHz</span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ENERGY vs PERFORMANCE COMPARISON -->
+  <div class="card pink">
+    <div class="card-title">EnergyAware vs Round-Robin</div>
+    <div id="compareSection">
+      <div class="compare-row">
+        <div class="compare-row-header">
+          <span>Total Energy</span>
+          <span id="cmp-energy-vals">— mJ vs — mJ</span>
+        </div>
+        <div class="bar-wrap">
+          <div class="bar bar-ea" id="bar-ea-energy" style="width:0%"></div>
+        </div>
+        <div style="height:4px"></div>
+        <div class="bar-wrap">
+          <div class="bar bar-rr" id="bar-rr-energy" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="compare-row" style="margin-top:16px">
+        <div class="compare-row-header">
+          <span>Avg Turnaround</span>
+          <span id="cmp-turn-vals">— ms vs — ms</span>
+        </div>
+        <div class="bar-wrap">
+          <div class="bar bar-ea" id="bar-ea-turn" style="width:0%"></div>
+        </div>
+        <div style="height:4px"></div>
+        <div class="bar-wrap">
+          <div class="bar bar-rr" id="bar-rr-turn" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="compare-row" style="margin-top:16px">
+        <div class="compare-row-header">
+          <span>Avg Waiting</span>
+          <span id="cmp-wait-vals">— ms vs — ms</span>
+        </div>
+        <div class="bar-wrap">
+          <div class="bar bar-ea" id="bar-ea-wait" style="width:0%"></div>
+        </div>
+        <div style="height:4px"></div>
+        <div class="bar-wrap">
+          <div class="bar bar-rr" id="bar-rr-wait" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:16px;margin-top:16px;font-size:10px">
+      <span style="color:var(--accent)">■ EnergyAware</span>
+      <span style="color:var(--accent4)">■ Round-Robin</span>
+    </div>
+  </div>
+
+  <!-- TASK LOG TABLE -->
+  <div class="card card-full">
+    <div class="card-title">Completed Task Log</div>
+    <div class="log-wrap">
+      <table id="taskLog">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Task</th>
+            <th>Type</th>
+            <th>Burst (ms)</th>
+            <th>Finish (ms)</th>
+            <th>Turnaround</th>
+            <th>Waiting</th>
+            <th>Energy (mJ)</th>
+          </tr>
+        </thead>
+        <tbody id="taskLogBody">
+          <tr><td colspan="8" style="color:var(--muted);text-align:center;padding:20px">
+            Run a simulation to see results
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// SIMULATION ENGINE (pure JS — mirrors Python logic)
+// ═══════════════════════════════════════════════════════════════
+
+const DVFS_LEVELS = [
+  {freq:300,  volt:0.80, pf:0.10},
+  {freq:600,  volt:0.90, pf:0.25},
+  {freq:900,  volt:1.00, pf:0.45},
+  {freq:1200, volt:1.10, pf:0.65},
+  {freq:1500, volt:1.20, pf:0.82},
+  {freq:1800, volt:1.30, pf:1.00},
+];
+
+function dvfsPower(level, activity=1.0) {
+  return level.pf * level.volt * level.volt * (level.freq / 1000) * 100 * activity;
+}
+
+function selectDVFS(qLen, avgInt, thermalHR, dlPressure) {
+  const wscore = Math.min(1, (qLen/10)*0.4 + avgInt*0.4 + dlPressure*0.2);
+  const adj = wscore * Math.max(0, thermalHR);
+  const idx = Math.min(DVFS_LEVELS.length-1, Math.ceil(adj*(DVFS_LEVELS.length-1)));
+  return idx;
+}
+
+function thermalStep(temp, powerMw, dt=10) {
+  const R=0.25, C=5, Tamb=25;
+  const tau = R*C;
+  const Tss = Tamb + powerMw*R;
+  return Math.min(90, Tss + (temp - Tss)*Math.exp(-dt/(tau*1000)));
+}
+
+function thermalHeadroom(temp, throttle=75, ambient=25) {
+  return Math.max(0, Math.min(1, (throttle-temp)/(throttle-ambient)));
+}
+
+// Task profiles (JS version)
+const PROFILES = [
+  {prefix:'UI',      burstMean:5,  burstStd:2,  priority:3, deadline:16,  intensity:0.6, iat:16},
+  {prefix:'BG_SYNC', burstMean:50, burstStd:20, priority:1, deadline:null, intensity:0.3, iat:200},
+  {prefix:'MEDIA',   burstMean:8,  burstStd:2,  priority:2, deadline:33,  intensity:0.8, iat:33},
+  {prefix:'SENSOR',  burstMean:2,  burstStd:0.5,priority:4, deadline:5,   intensity:0.4, iat:20},
+  {prefix:'NET_IO',  burstMean:15, burstStd:8,  priority:2, deadline:null, intensity:0.5, iat:100},
+];
+
+function gaussRand(mean, std, rng) {
+  // Box-Muller
+  const u1 = rng(), u2 = rng();
+  return mean + std * Math.sqrt(-2*Math.log(u1)) * Math.cos(2*Math.PI*u2);
+}
+
+function seededRng(seed) {
+  let s = seed;
+  return () => {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    return (s >>> 0) / 0xffffffff;
+  };
+}
+
+function generateWorkload(scenario, numTasks, durationMs) {
+  const rng = seededRng(42);
+  const tasks = [];
+  let id = 1;
+
+  let profileWeights;
+  if (scenario === 'stress')
+    profileWeights = [3, 0, 2, 1.5, 0];
+  else if (scenario === 'idle')
+    profileWeights = [0, 0.5, 0, 0, 0.5];
+  else
+    profileWeights = [1, 1, 1, 1, 1];
+
+  for (let pi = 0; pi < PROFILES.length; pi++) {
+    const p = PROFILES[pi];
+    const w = profileWeights[pi];
+    if (w === 0) continue;
+    const lam = p.iat / w;
+    let t = 0;
+    while (t < durationMs && tasks.length < numTasks*2) {
+      t += -lam * Math.log(rng()+0.001);
+      if (t >= durationMs) break;
+      const burst = Math.max(1, gaussRand(p.burstMean, p.burstStd, rng));
+      const intensity = Math.max(0.05, Math.min(1, gaussRand(p.intensity, 0.12, rng)));
+      tasks.push({
+        id: id++,
+        name: `${p.prefix}_${String(id-1).padStart(3,'0')}`,
+        prefix: p.prefix,
+        burst, remaining: burst,
+        arrival: Math.round(t*10)/10,
+        priority: p.priority,
+        deadline: p.deadline ? t + p.deadline : null,
+        intensity,
+        startTime: null, finishTime: null, state: 'ready',
+      });
+    }
+  }
+  tasks.sort((a,b) => a.arrival - b.arrival);
+  return tasks.slice(0, numTasks);
+}
+
+function runEnergyAware(tasks, tq=10) {
+  const queue = tasks.map(t=>({...t}));
+  let time=0, energy=0, totalEnergy=0;
+  const tempHistory=[25], freqHistory=[], energyHistory=[];
+  const gantt=[];
+  const log=[];
+  let temp=25;
+  let completed=[];
+
+  const MAX = 800;
+  for (let tick=0; tick<MAX; tick++) {
+    const active = queue.filter(t=>t.state!=='done');
+    if (!active.length) break;
+
+    // Admit tasks
+    active.forEach(t=>{ if(t.arrival<=time && t.state==='waiting') t.state='ready'; });
+
+    const eligible = active.filter(t=>t.arrival<=time && t.state==='ready');
+    const avgInt = eligible.length ? eligible.reduce((s,t)=>s+t.intensity,0)/eligible.length : 0;
+
+    const dlPressure = (() => {
+      const ps = eligible.filter(t=>t.deadline).map(t=>Math.max(0,1-(t.deadline-time)/200));
+      return ps.length ? Math.max(...ps) : 0;
+    })();
+
+    const hr = thermalHeadroom(temp);
+    const lvlIdx = selectDVFS(eligible.length, avgInt, hr, dlPressure);
+    const lvl = DVFS_LEVELS[lvlIdx];
+
+    freqHistory.push(lvl.freq);
+
+    if (!eligible.length) {
+      temp = thermalStep(temp, 0, tq);
+      time += tq;
+      tempHistory.push(Math.round(temp*100)/100);
+      energyHistory.push(0);
+      continue;
+    }
+
+    // EDF sort
+    eligible.sort((a,b)=>{
+      const da = a.deadline ?? Infinity;
+      const db = b.deadline ?? Infinity;
+      if (da !== db) return da-db;
+      return b.priority-a.priority;
+    });
+
+    const task = eligible[0];
+    if (task.startTime===null) task.startTime=time;
+    task.state='running';
+
+    const speedRatio = lvl.freq/1800;
+    const work = tq * speedRatio;
+    task.remaining = Math.max(0, task.remaining - work);
+
+    const pmw = dvfsPower(lvl, task.intensity);
+    temp = thermalStep(temp, pmw, tq);
+    const e = pmw * (tq/1000);
+    totalEnergy += e;
+    energyHistory.push(Math.round(e*100)/100);
+    tempHistory.push(Math.round(temp*100)/100);
+
+    gantt.push({time, task: task.name, prefix: task.prefix, lvlIdx, freq: lvl.freq});
+    time += tq;
+
+    if (task.remaining <= 0) {
+      task.finishTime = time;
+      task.state = 'done';
+      completed.push(task);
+      log.push({
+        id: task.id,
+        name: task.name,
+        prefix: task.prefix,
+        burst: Math.round(task.burst*10)/10,
+        finish: time,
+        turnaround: Math.round((time - task.arrival)*10)/10,
+        waiting: Math.round((time - task.arrival - task.burst)*10)/10,
+        energy: Math.round(e*10000)/10000,
+      });
+    } else {
+      task.state='ready';
+    }
+  }
+
+  const tats = completed.map(t=>t.finishTime-t.arrival);
+  const wts  = completed.map(t=>t.finishTime-t.arrival-t.burst);
+
+  return {
+    completed, log, gantt, tempHistory, freqHistory, energyHistory,
+    totalEnergy: Math.round(totalEnergy*100)/100,
+    avgTurnaround: tats.length ? Math.round(tats.reduce((a,b)=>a+b,0)/tats.length*10)/10 : 0,
+    avgWaiting: wts.length ? Math.round(wts.reduce((a,b)=>a+b,0)/wts.length*10)/10 : 0,
+    maxTemp: Math.max(...tempHistory),
+    numTasks: completed.length,
+  };
+}
+
+function runRoundRobin(tasks, tq=10) {
+  const queue = tasks.map(t=>({...t}));
+  queue.sort((a,b)=>a.arrival-b.arrival);
+  let time=0, totalEnergy=0;
+  let rr=[], idx=0, completed=[];
+  const MAX_PWR = dvfsPower(DVFS_LEVELS[5], 1.0);
+  let tats=[], wts=[];
+
+  for (let tick=0; tick<2000 && (rr.length||idx<queue.length); tick++) {
+    while (idx<queue.length && queue[idx].arrival<=time) { rr.push(queue[idx++]); }
+    if (!rr.length) { if (idx<queue.length) time=queue[idx].arrival; continue; }
+    const task=rr.shift();
+    if (task.startTime===null) task.startTime=time;
+    task.remaining -= tq;
+    totalEnergy += MAX_PWR*(tq/1000)*task.intensity;
+    time+=tq;
+    if (task.remaining<=0) {
+      task.finishTime=time;
+      completed.push(task);
+      tats.push(time-task.arrival);
+      wts.push(time-task.arrival-task.burst);
+    } else rr.push(task);
+  }
+  return {
+    totalEnergy: Math.round(totalEnergy*100)/100,
+    avgTurnaround: tats.length ? Math.round(tats.reduce((a,b)=>a+b,0)/tats.length*10)/10 : 0,
+    avgWaiting: wts.length ? Math.round(wts.reduce((a,b)=>a+b,0)/wts.length*10)/10 : 0,
+    numTasks: completed.length,
+  };
+}
+
+function governorComparison(freqHistory) {
+  // Simplified: compute energy at each governor policy's typical freq selection
+  const trace = freqHistory.slice(0,50);
+  const policies = {
+    schedutil:   { freqs: trace, label: 'schedutil' },
+    ondemand:    { freqs: trace.map(f=> f>1000 ? 1800:300), label:'ondemand' },
+    performance: { freqs: trace.map(_=>1800), label:'performance' },
+    powersave:   { freqs: trace.map(_=>300),  label:'powersave' },
+  };
+  const res={};
+  for (const [key,p] of Object.entries(policies)) {
+    const e = p.freqs.reduce((sum,f)=>{
+      const lvl = DVFS_LEVELS.find(l=>l.freq===f)||DVFS_LEVELS[0];
+      return sum + dvfsPower(lvl)*0.01;
+    },0);
+    res[key] = Math.round(e*100)/100;
+  }
+  return res;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CANVAS RENDERING
+// ═══════════════════════════════════════════════════════════════
+
+function renderLineChart(canvasId, data, color, label, yMin, yMax) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth || 600;
+  const H = parseInt(canvas.getAttribute('height')) || 160;
+  canvas.width = W; canvas.height = H;
+
+  const PAD = {top:10,right:10,bottom:24,left:48};
+  const w = W-PAD.left-PAD.right;
+  const h = H-PAD.top-PAD.bottom;
+
+  ctx.clearRect(0,0,W,H);
+
+  // Grid
+  ctx.strokeStyle='rgba(30,45,69,0.8)'; ctx.lineWidth=1;
+  for (let i=0;i<=4;i++) {
+    const y=PAD.top+h*(1-i/4);
+    ctx.beginPath(); ctx.moveTo(PAD.left,y); ctx.lineTo(PAD.left+w,y); ctx.stroke();
+  }
+
+  // Y labels
+  ctx.fillStyle='#4a6380'; ctx.font='10px JetBrains Mono'; ctx.textAlign='right';
+  for (let i=0;i<=4;i++) {
+    const y=PAD.top+h*(1-i/4);
+    const v = yMin + (yMax-yMin)*i/4;
+    ctx.fillText(Math.round(v), PAD.left-6, y+4);
+  }
+
+  if (!data.length) return;
+
+  // Area fill
+  const grad = ctx.createLinearGradient(0,PAD.top,0,PAD.top+h);
+  grad.addColorStop(0, color+'44');
+  grad.addColorStop(1, color+'00');
+  ctx.beginPath();
+  data.forEach((v,i) => {
+    const x = PAD.left + (i/(data.length-1||1))*w;
+    const y = PAD.top + h*(1-Math.max(0,(v-yMin)/(yMax-yMin||1)));
+    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.lineTo(PAD.left+w, PAD.top+h);
+  ctx.lineTo(PAD.left, PAD.top+h);
+  ctx.closePath();
+  ctx.fillStyle=grad; ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.strokeStyle=color; ctx.lineWidth=2;
+  data.forEach((v,i) => {
+    const x = PAD.left + (i/(data.length-1||1))*w;
+    const y = PAD.top + h*(1-Math.max(0,(v-yMin)/(yMax-yMin||1)));
+    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+}
+
+function renderDualChart(canvasId, data1, color1, data2, color2, yMin, yMax) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth || 600;
+  const H = parseInt(canvas.getAttribute('height')) || 160;
+  canvas.width = W; canvas.height = H;
+  const PAD = {top:10,right:10,bottom:24,left:48};
+  const w=W-PAD.left-PAD.right, h=H-PAD.top-PAD.bottom;
+  ctx.clearRect(0,0,W,H);
+
+  ctx.strokeStyle='rgba(30,45,69,0.8)'; ctx.lineWidth=1;
+  for (let i=0;i<=4;i++){
+    const y=PAD.top+h*(1-i/4);
+    ctx.beginPath(); ctx.moveTo(PAD.left,y); ctx.lineTo(PAD.left+w,y); ctx.stroke();
+    ctx.fillStyle='#4a6380'; ctx.font='10px JetBrains Mono'; ctx.textAlign='right';
+    ctx.fillText(Math.round(yMin+(yMax-yMin)*i/4), PAD.left-6, y+4);
+  }
+
+  const drawLine = (data,color) => {
+    ctx.beginPath(); ctx.strokeStyle=color; ctx.lineWidth=2;
+    data.forEach((v,i)=>{
+      const x=PAD.left+(i/(data.length-1||1))*w;
+      const y=PAD.top+h*(1-Math.max(0,(v-yMin)/(yMax-yMin||1)));
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  };
+  drawLine(data1, color1);
+  drawLine(data2, color2);
+}
+
+function renderGantt(gantt, tasks) {
+  const canvas = document.getElementById('ganttCanvas');
+  if (!canvas||!gantt.length) return;
+  const W = Math.max(900, gantt.length*8);
+  canvas.width=W; canvas.height=200;
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,W,200);
+
+  const prefixes=[...new Set(tasks.map(t=>t.prefix))];
+  const rowH=32, padLeft=80, padTop=20;
+  const colors={UI:'#00e5ff',MEDIA:'#ff6b35',SENSOR:'#39ff14',BG_SYNC:'#4a6380',NET_IO:'#ffb547'};
+
+  // Row labels
+  ctx.font='10px JetBrains Mono'; ctx.fillStyle='#4a6380';
+  prefixes.forEach((p,i)=>{
+    ctx.textAlign='right';
+    ctx.fillText(p, padLeft-6, padTop+i*rowH+rowH/2+4);
+    ctx.strokeStyle='rgba(30,45,69,0.4)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(padLeft,padTop+i*rowH); ctx.lineTo(W,padTop+i*rowH); ctx.stroke();
+  });
+
+  const maxTime = gantt.length ? gantt[gantt.length-1].time+10 : 100;
+  const scale=(W-padLeft)/maxTime;
+
+  gantt.forEach(g=>{
+    const row=prefixes.indexOf(g.prefix);
+    if(row<0) return;
+    const x=padLeft+g.time*scale;
+    const bw=10*scale;
+    const col=colors[g.prefix]||'#666';
+    ctx.fillStyle=col+'cc';
+    ctx.fillRect(x,padTop+row*rowH+4,Math.max(2,bw),rowH-8);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// UI UPDATES
+// ═══════════════════════════════════════════════════════════════
+
+function updateKPI(id, value, delta, deltaClass='') {
+  const el=document.getElementById(id);
+  if(el) el.textContent=value;
+  if(delta!==undefined) {
+    const del=document.getElementById(id.replace('val-','val-')+'...');
+  }
+}
+
+function updateThermal(maxTemp, tempHistory) {
+  const zones=[
+    {id:'big',   factor:1.00, color:'var(--accent3)',  throttle:75, max:85},
+    {id:'little',factor:0.92, color:'var(--accent)',   throttle:70, max:80},
+    {id:'soc',   factor:1.05, color:'var(--warm)',     throttle:80, max:90},
+  ];
+  zones.forEach(z=>{
+    const t=Math.round(maxTemp*z.factor*10)/10;
+    document.getElementById(`tz-${z.id}`).textContent=t+'°';
+    const pct=Math.min(100, t/z.max*100);
+    const bar=document.getElementById(`tzbar-${z.id}`);
+    bar.style.width=pct+'%';
+    bar.style.background = t>=z.throttle ? 'var(--accent4)' :
+                           t>=z.throttle*0.85 ? 'var(--warm)' : z.color;
+    const status=document.getElementById(`tzs-${z.id}`);
+    status.textContent = t>=z.max ? 'CRITICAL' : t>=z.throttle ? 'THROTTLING' :
+                          t>=50 ? 'WARM' : 'COOL';
+    status.style.color = t>=z.max ? 'var(--accent4)' : t>=z.throttle ? 'var(--warm)' :
+                          t>=50 ? 'var(--accent3)' : 'var(--muted)';
+  });
+}
+
+function updateCompareBars(ea, rr) {
+  const eE=ea.totalEnergy, rE=rr.totalEnergy;
+  const maxE=Math.max(eE,rE);
+  document.getElementById('bar-ea-energy').style.width=(eE/maxE*100)+'%';
+  document.getElementById('bar-rr-energy').style.width=(rE/maxE*100)+'%';
+  document.getElementById('cmp-energy-vals').textContent=`${eE} mJ  vs  ${rE} mJ`;
+
+  const eT=ea.avgTurnaround, rT=rr.avgTurnaround;
+  const maxT=Math.max(eT,rT);
+  document.getElementById('bar-ea-turn').style.width=(eT/maxT*100)+'%';
+  document.getElementById('bar-rr-turn').style.width=(rT/maxT*100)+'%';
+  document.getElementById('cmp-turn-vals').textContent=`${eT} ms  vs  ${rT} ms`;
+
+  const eW=ea.avgWaiting, rW=rr.avgWaiting;
+  const maxW=Math.max(eW,rW,1);
+  document.getElementById('bar-ea-wait').style.width=(eW/maxW*100)+'%';
+  document.getElementById('bar-rr-wait').style.width=(rW/maxW*100)+'%';
+  document.getElementById('cmp-wait-vals').textContent=`${eW} ms  vs  ${rW} ms`;
+}
+
+function updateGovComparison(govData) {
+  const vals=Object.values(govData);
+  const maxV=Math.max(...vals);
+  ['schedutil','ondemand','performance','powersave'].forEach(k=>{
+    const v=govData[k]||0;
+    document.getElementById(`gov-${k}`).style.width=(v/maxV*100)+'%';
+    document.getElementById(`govv-${k}`).textContent=v.toFixed(1)+' mJ';
+  });
+}
+
+function updateFreqHeatmap(freqHistory) {
+  const container=document.getElementById('freqHeatmap');
+  container.innerHTML='';
+  const freqColors={300:'#1a2a38',600:'#2a7d8c',900:'#1a9e9e',1200:'#0cbfa8',1500:'#00d4b5',1800:'#00e5ff'};
+  const slice=freqHistory.slice(0,120);
+  slice.forEach(f=>{
+    const cell=document.createElement('div');
+    cell.className='freq-cell';
+    cell.style.background=freqColors[f]||'#333';
+    cell.title=f+' MHz';
+    container.appendChild(cell);
+  });
+}
+
+function updateTaskLog(log) {
+  const tbody=document.getElementById('taskLogBody');
+  const tagClass={UI:'tag-ui',MEDIA:'tag-media',SENSOR:'tag-sensor',BG_SYNC:'tag-bg',NET_IO:'tag-net'};
+  tbody.innerHTML=log.slice(0,80).map((t,i)=>`
+    <tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td style="color:var(--text)">${t.name}</td>
+      <td><span class="tag ${tagClass[t.prefix]||''}">${t.prefix}</span></td>
+      <td>${t.burst}</td>
+      <td>${t.finish}</td>
+      <td style="color:var(--accent)">${t.turnaround}</td>
+      <td style="color:${t.waiting<10?'var(--accent3)':t.waiting<30?'var(--warm)':'var(--accent4)'}">${t.waiting}</td>
+      <td style="color:var(--muted)">${t.energy}</td>
+    </tr>
+  `).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SIMULATION RUNNER (with animation)
+// ═══════════════════════════════════════════════════════════════
+
+let currentScenario='mixed';
+let isRunning=false;
+
+document.querySelectorAll('.scenario-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.scenario-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentScenario=btn.dataset.scenario;
+  });
+});
+
+document.getElementById('speedSlider').addEventListener('input',e=>{
+  document.getElementById('speedVal').textContent=e.target.value+'×';
+});
+document.getElementById('taskSlider').addEventListener('input',e=>{
+  document.getElementById('taskVal').textContent=e.target.value;
+});
+
+document.getElementById('runBtn').addEventListener('click', runSimulation);
+
+async function runSimulation() {
+  if (isRunning) return;
+  isRunning=true;
+  const btn=document.getElementById('runBtn');
+  btn.textContent='⏳ Running…';
+  btn.disabled=true;
+
+  const pw=document.getElementById('progressWrap');
+  const pb=document.getElementById('progressBar');
+  const pl=document.getElementById('progressLabel');
+  pw.classList.add('visible');
+
+  const numTasks=parseInt(document.getElementById('taskSlider').value);
+  const speed=parseInt(document.getElementById('speedSlider').value);
+
+  const steps=[
+    'Generating task workload…',
+    'Running EDF + DVFS scheduler…',
+    'Running Round-Robin baseline…',
+    'Computing governor comparison…',
+    'Rendering charts…',
+    'Complete!',
+  ];
+
+  for (let i=0;i<steps.length;i++) {
+    pl.textContent=steps[i];
+    pb.style.width=((i/(steps.length-1))*100)+'%';
+    await delay(80/speed);
+  }
+
+  // Run simulations
+  const tasks=generateWorkload(currentScenario, numTasks, 500);
+  const ea=runEnergyAware(tasks);
+  const rr=runRoundRobin(tasks);
+  const savings=Math.round((1-ea.totalEnergy/Math.max(rr.totalEnergy,1))*1000)/10;
+  const govData=governorComparison(ea.freqHistory);
+
+  // Update KPIs
+  document.getElementById('val-saving').innerHTML=`${savings}<span class="unit"> %</span>`;
+  document.getElementById('val-saving-sub').textContent=`${ea.totalEnergy} mJ vs ${rr.totalEnergy} mJ`;
+  document.getElementById('val-tasks').textContent=ea.numTasks;
+  document.getElementById('val-tasks-sub').textContent=`${tasks.length} tasks generated`;
+  document.getElementById('val-turn').innerHTML=`${ea.avgTurnaround}<span class="unit"> ms</span>`;
+  const turnDiff=Math.round((rr.avgTurnaround-ea.avgTurnaround)*10)/10;
+  const turnEl=document.getElementById('val-turn-sub');
+  turnEl.textContent=(turnDiff>=0?`${turnDiff} ms faster than RR`:`${-turnDiff} ms slower than RR`);
+  turnEl.className=`kpi-delta ${turnDiff>=0?'good':'bad'}`;
+  document.getElementById('val-temp').innerHTML=`${Math.round(ea.maxTemp)}<span class="unit"> °C</span>`;
+  const tempEl=document.getElementById('val-temp-sub');
+  tempEl.textContent=ea.maxTemp<75?'Below throttle limit':'Warning: throttling';
+  tempEl.className=`kpi-delta ${ea.maxTemp<75?'good':'bad'}`;
+
+  // Animate KPIs
+  document.querySelectorAll('.kpi').forEach(k=>k.classList.add('loaded'));
+
+  await delay(60/speed);
+  updateThermal(ea.maxTemp, ea.tempHistory);
+
+  await delay(40/speed);
+  renderLineChart('thermalChart', ea.tempHistory.slice(0,150), '#39ff14', 'temp', 20, 90);
+
+  await delay(40/speed);
+  // Dual chart: freq + energy
+  const freqNorm=ea.freqHistory.map(f=>f/1800*100);
+  const energyNorm=ea.energyHistory.map(e=>Math.min(100,e*800));
+  renderDualChart('freqChart', freqNorm.slice(0,150), '#00e5ff', energyNorm.slice(0,150), '#ff6b35', 0, 110);
+
+  await delay(40/speed);
+  renderGantt(ea.gantt.slice(0,200), tasks);
+
+  await delay(40/speed);
+  updateCompareBars(ea, rr);
+
+  await delay(40/speed);
+  updateGovComparison(govData);
+
+  await delay(40/speed);
+  updateFreqHeatmap(ea.freqHistory);
+
+  await delay(40/speed);
+  updateTaskLog(ea.log);
+
+  pw.classList.remove('visible');
+  btn.textContent='▶ Run Simulation';
+  btn.disabled=false;
+  isRunning=false;
+}
+
+function delay(ms) { return new Promise(r=>setTimeout(r,ms)); }
+
+// Auto-run on load
+window.addEventListener('load', ()=>{ setTimeout(runSimulation, 400); });
+</script>
+</body>
+</html>
